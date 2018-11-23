@@ -1,24 +1,22 @@
 package cn.zhouyafeng.itchat4j.demo.demo2;
 
-import java.io.File;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.logging.Logger;
-
-import org.apache.http.HttpEntity;
-import org.apache.http.util.EntityUtils;
-
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
-
 import cn.zhouyafeng.itchat4j.Wechat;
 import cn.zhouyafeng.itchat4j.beans.BaseMsg;
+import cn.zhouyafeng.itchat4j.beans.TuringRobotRequest;
+import cn.zhouyafeng.itchat4j.beans.TuringRobotResponse;
 import cn.zhouyafeng.itchat4j.core.Core;
 import cn.zhouyafeng.itchat4j.face.IMsgHandlerFace;
 import cn.zhouyafeng.itchat4j.utils.MyHttpClient;
 import cn.zhouyafeng.itchat4j.utils.enums.MsgTypeEnum;
 import cn.zhouyafeng.itchat4j.utils.tools.DownloadTools;
+import com.alibaba.fastjson.JSON;
+import org.apache.http.HttpEntity;
+import org.apache.http.util.EntityUtils;
+
+import java.io.File;
+import java.util.*;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * 图灵机器人示例
@@ -31,52 +29,89 @@ import cn.zhouyafeng.itchat4j.utils.tools.DownloadTools;
 public class TulingRobot implements IMsgHandlerFace {
 	Logger logger = Logger.getLogger("TulingRobot");
 	MyHttpClient myHttpClient = Core.getInstance().getMyHttpClient();
-	String url = "http://www.tuling123.com/openapi/api";
-	String apiKey = "597b34bea4ec4c85a775c469c84b6817"; // 这里是我申请的图灵机器人API接口，每天只能5000次调用，建议自己去申请一个，免费的:)
+	String url = "http://openapi.tuling123.com/openapi/api/v2";
+	String apiKey = "16f9b29d1ffd42d09d189f64fdb8acd9"; // 这里是我申请的图灵机器人API接口，每天只能5000次调用，建议自己去申请一个，免费的:)
 
 	@Override
 	public String textMsgHandle(BaseMsg msg) {
+		List<String> validUsers=new ArrayList<>();
+		validUsers.add("@3b0d8c17f9eaacbb96b052d7e50d6856f8aa462f2ea306e29400fc9e20c0e65f");
+		if(!validUsers.contains(msg.getFromUserName())){
+			return null;
+		}
+		if(msg.isGroupMsg()){
+			return null;
+		}
 		String result = "";
 		String text = msg.getText();
+		String fromUserName= msg.getFromUserName();
 		Map<String, String> paramMap = new HashMap<String, String>();
 		paramMap.put("key", apiKey);
 		paramMap.put("info", text);
 		paramMap.put("userid", "123456");
 		String paramStr = JSON.toJSONString(paramMap);
+
+		TuringRobotRequest request = new TuringRobotRequest();
+		TuringRobotRequest.PerceptionBean perception = new TuringRobotRequest.PerceptionBean();
+		TuringRobotRequest.PerceptionBean.InputTextBean inputTextBean = new TuringRobotRequest.PerceptionBean.InputTextBean();
+		TuringRobotRequest.UserInfoBean userInfo = new TuringRobotRequest.UserInfoBean();
+		userInfo.setApiKey(apiKey);
+		userInfo.setUserId("123456");
+		request.setUserInfo(userInfo);
+
+		inputTextBean.setText(text);
+		perception.setInputText(inputTextBean);
+		request.setPerception(perception);
+		String requestJson = JSON.toJSONString(request);
 		try {
-			HttpEntity entity = myHttpClient.doPost(url, paramStr);
+			HttpEntity entity = myHttpClient.doPost(url, requestJson);
 			result = EntityUtils.toString(entity, "UTF-8");
-			JSONObject obj = JSON.parseObject(result);
-			if (obj.getString("code").equals("100000")) {
-				result = obj.getString("text");
-			} else {
-				result = "处理有误";
+//			JSONObject obj = JSON.parseObject(result);
+//			if (obj.getString("code").equals("100000")) {
+//				result = obj.getString("text");
+//			} else {
+//				result = "这些问题，我还不知道啦";
+//			}
+
+			TuringRobotResponse response = JSON.parseObject(result,TuringRobotResponse.class);
+			List<TuringRobotResponse.ResultsBean> resultBeans=response.getResults();
+			if(resultBeans!=null&&resultBeans.size()>0){
+				TuringRobotResponse.ResultsBean resultsBean = resultBeans.stream().filter(r->"text".equals(r.getResultType())).collect(Collectors.toList()).get(0);
+				result=resultsBean.getValues().getText();
 			}
+
 		} catch (Exception e) {
 			logger.info(e.getMessage());
+			result="这些问题，我还不知道啦";
 		}
 		return result;
 	}
 
 	@Override
 	public String picMsgHandle(BaseMsg msg) {
-		return "收到图片";
+		return null;
 	}
 
 	@Override
 	public String voiceMsgHandle(BaseMsg msg) {
+		if(msg.isGroupMsg()){
+			return null;
+		}
 		String fileName = String.valueOf(new Date().getTime());
 		String voicePath = "D://itchat4j/voice" + File.separator + fileName + ".mp3";
 		DownloadTools.getDownloadFn(msg, MsgTypeEnum.VOICE.getType(), voicePath);
-		return "收到语音";
+		return null;
 	}
 
 	@Override
 	public String viedoMsgHandle(BaseMsg msg) {
+		if(msg.isGroupMsg()){
+			return null;
+		}
 		String fileName = String.valueOf(new Date().getTime());
 		String viedoPath = "D://itchat4j/viedo" + File.separator + fileName + ".mp4";
 		DownloadTools.getDownloadFn(msg, MsgTypeEnum.VIEDO.getType(), viedoPath);
-		return "收到视频";
+		return null;
 	}
 
 	public static void main(String[] args) {
